@@ -10,7 +10,7 @@ This repository builds synthetic supply networks by:
 - **Degree reordering**: `triangular_wedge_matching` reorders degrees; `noise_amount_for_reordering_burrkiko` in `conf/network/default.yaml` controls the wedge noise (ζ; default −0.14).
 - **Sparse topology**: A directed configuration model (`igraph`) realizes the degree sequences by sampling an adjacency matrix. 
 - **Lognormal fitnesses**: Initial in- and out-fitnesses sequences are correlated lognormals. 
-- **Four-parameter edge weights**: Weights use `populate_weights_fourparams` with θ\(_{k,\mathrm{in}}\), θ\(_{k,\mathrm{out}}\), θ\(_{f,\mathrm{in}}\), θ\(_{f,\mathrm{out}}\) (defaults in YAML; optimizable via Optuna).
+- **Four-parameter edge weights**: Weights use `populate_weights_fourparams` with $\theta_{k,\mathrm{in}}, \theta_{k,\mathrm{out}},\theta_{f,\mathrm{in}}, \theta_{f,\mathrm{out}}$ (defaults in YAML; optimizable via Optuna).
 - **IOT consistency**: `scale_by_iot` rescales the firm–firm network so its industry-level aggregate matches the country’s input–output table (`data_iot.load_input_output_table`).
 - **Optuna tuning**: `TrainingConfig` drives Optuna search over the four θ bounds and trial count (`conf/training/default.yaml`). The single-run API is `optuna_search_single_experiment` in `network_generator/optuna_search/search_algo_fourparams.py`; batch replication uses `run_optuna_theta_multiple_experiments` in `run_multiple_times.py`.
 
