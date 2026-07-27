@@ -1,16 +1,24 @@
 """
 Visualize the distributional properties of multiple networks, save them as .png files.
 Also plot selected network properties as boxplots.
+
+Plot styling:
+    Only ``visualize_iot`` and ``visualize_network_for_overleaf_main`` use the
+    scienceplots "science" aesthetic (via ``_with_science_style``). All other
+    functions in this module use matplotlib's default style.
 """
+
+from functools import wraps
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import BoundaryNorm, LogNorm
+import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
 from matplotlib import gridspec
+from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap, LogNorm
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 
@@ -19,10 +27,137 @@ from network_generator.metrics import (
     compute_pagerank,
     compute_strengths_from_model,
 )
-
 from network_generator.utils import firm_model_to_iot
-
 from network_generator.visualization import series_to_ccdf_dict
+
+
+def _with_science_style(fn):
+    """Apply matplotlib's science style for a single plotting function."""
+
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        import scienceplots  # noqa: F401  (registers the "science" style)
+
+        with plt.style.context(["science", "nature"]):
+            return fn(*args, **kwargs)
+
+    return wrapper
+
+
+# The IOT matrices are expressed in units of 100 million USD.
+IOT_UNIT_IN_USD = 1e8
+
+# Reference blue: the first color of the "science" style cycle, i.e. the color
+# of the single-line CCDFs (edge weights, pagerank). Reused for the in-curves
+# and as the dark end of both heatmap colormaps so the whole figure is coherent.
+COLOR_IN = "#0C5DA5"  # dark blue (solid in-curves)
+COLOR_OUT = "#6BAED6"  # light blue (dashed out-curves)
+
+# Sequential white -> blue colormap (matches the CCDF line color) for heatmaps.
+WHITE_TO_BLUE_CMAP = LinearSegmentedColormap.from_list(
+    "white_to_blue", ["white", COLOR_IN]
+)
+
+# Light-blue -> dark-blue colormap for the joint-density panels: starts from a
+# visible light blue so low-but-nonzero density still stands out (empty bins
+# stay white via the LogNorm "bad" color).
+LIGHTBLUE_TO_BLUE_CMAP = LinearSegmentedColormap.from_list(
+    "lightblue_to_blue", ["#d6e6f4", COLOR_IN]
+)
+
+# OECD ICIO 45-sector classification: (code, full name), ordered to match the
+# rows/columns of the input-output table.
+ICIO_SECTORS = (
+    ("D01T02", "Agriculture, hunting, forestry"),
+    ("D03", "Fishing and aquaculture"),
+    ("D05T06", "Mining and quarrying, energy producing products"),
+    ("D07T08", "Mining and quarrying, non-energy producing products"),
+    ("D09", "Mining support service activities"),
+    ("D10T12", "Food products, beverages and tobacco"),
+    ("D13T15", "Textiles, textile products, leather and footwear"),
+    ("D16", "Wood and products of wood and cork"),
+    ("D17T18", "Paper products and printing"),
+    ("D19", "Coke and refined petroleum products"),
+    ("D20", "Chemical and chemical products"),
+    ("D21", "Pharmaceuticals, medicinal chemical and botanical products"),
+    ("D22", "Rubber and plastics products"),
+    ("D23", "Other non-metallic mineral products"),
+    ("D24", "Basic metals"),
+    ("D25", "Fabricated metal products"),
+    ("D26", "Computer, electronic and optical equipment"),
+    ("D27", "Electrical equipment"),
+    ("D28", "Machinery and equipment, nec"),
+    ("D29", "Motor vehicles, trailers and semi-trailers"),
+    ("D30", "Other transport equipment"),
+    ("D31T33", "Manufacturing nec; repair and installation of machinery and equipment"),
+    ("D35", "Electricity, gas, steam and air conditioning supply"),
+    ("D36T39", "Water supply; sewerage, waste management and remediation activities"),
+    ("D41T43", "Construction"),
+    ("D45T47", "Wholesale and retail trade; repair of motor vehicles"),
+    ("D49", "Land transport and transport via pipelines"),
+    ("D50", "Water transport"),
+    ("D51", "Air transport"),
+    ("D52", "Warehousing and support activities for transportation"),
+    ("D53", "Postal and courier activities"),
+    ("D55T56", "Accommodation and food service activities"),
+    ("D58T60", "Publishing, audiovisual and broadcasting activities"),
+    ("D61", "Telecommunications"),
+    ("D62T63", "IT and other information services"),
+    ("D64T66", "Financial and insurance activities"),
+    ("D68", "Real estate activities"),
+    ("D69T75", "Professional, scientific and technical activities"),
+    ("D77T82", "Administrative and support services"),
+    ("D84", "Public administration and defence; compulsory social security"),
+    ("D85", "Education"),
+    ("D86T88", "Human health and social work activities"),
+    ("D90T93", "Arts, entertainment and recreation"),
+    ("D94T96", "Other service activities"),
+    ("D97T98", "Activities of households as employers"),
+)
+ICIO_SECTOR_CODES = tuple(code for code, _ in ICIO_SECTORS)
+
+
+def format_dollars(dollars: float, sig_figs: int = 3) -> str:
+    """Format a USD amount with a K/M/B/T suffix, e.g. 1.1e8 -> "$110M".
+
+    Values are rounded to ``sig_figs`` significant figures. The dollar sign is
+    escaped when LaTeX rendering is active (a bare "$" would open math mode).
+    """
+    dollar = r"\$" if mpl.rcParams["text.usetex"] else "$"
+    if dollars == 0:
+        return f"{dollar}0"
+    # Round to the requested number of significant figures.
+    magnitude = np.floor(np.log10(abs(dollars)))
+    scale = 10 ** (magnitude - (sig_figs - 1))
+    dollars = np.round(dollars / scale) * scale
+    for threshold, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if abs(dollars) >= threshold:
+            return f"{dollar}{dollars / threshold:.3g}{suffix}"
+    return f"{dollar}{dollars:.3g}"
+
+
+def format_usd_magnitude(value_in_iot_units: float, sig_figs: int = 1) -> str:
+    """Format an IOT-unit value (100M USD) as a rounded dollar amount.
+
+    Used for the IOT colorbar ticks, e.g. 0.21 -> "$20M".
+    """
+    return format_dollars(value_in_iot_units * IOT_UNIT_IN_USD, sig_figs=sig_figs)
+
+
+def usd_axis_formatter(suppress_sub_cent: bool = True) -> mticker.FuncFormatter:
+    """Tick formatter labelling USD-valued (log) axes as $1K / $1M / $1B.
+
+    With ``suppress_sub_cent`` (the default), labels below $0.01 are hidden to
+    avoid cluttering the low end with sub-cent values like $0.0001; pass False
+    to show them.
+    """
+
+    def _fmt(value, _pos):
+        if suppress_sub_cent and value != 0 and abs(value) < 0.005:
+            return ""
+        return format_dollars(value)
+
+    return mticker.FuncFormatter(_fmt)
 
 
 def visualize_deg_ccdf(
@@ -46,10 +181,10 @@ def visualize_deg_ccdf(
     plt.show()
 
 
+@_with_science_style
 def visualize_iot(
     model: torch.Tensor,
     firm_to_industry_tensor: torch.Tensor,
-    monetary_unit: float,
     data_iot_np: np.ndarray,
     num_industries: int,
     country_code: str,
@@ -69,38 +204,84 @@ def visualize_iot(
     fig, axes = plt.subplots(1, 2, figsize=(13, 6.5))
 
     # Create a colormap and a BoundaryNorm based on the quantiles
-    cmap = plt.cm.viridis
+    cmap = WHITE_TO_BLUE_CMAP
     norm = BoundaryNorm(quantiles, ncolors=cmap.N, clip=True)
 
+    # Cells are drawn with pcolormesh (vector quads) rather than imshow so they
+    # stay crisp at any zoom in the PDF; white cell borders form the grid.
+    cell_edges = np.arange(num_industries + 1) - 0.5
+
     # Panel 1 (Row 0, Col 0): Heatmap of output aggregated IOT
-    img1 = axes[0].imshow(output_agg_iot_np, cmap=cmap, norm=norm, aspect="auto")
+    img1 = axes[0].pcolormesh(
+        cell_edges,
+        cell_edges,
+        output_agg_iot_np,
+        cmap=cmap,
+        norm=norm,
+        edgecolors="white",
+        linewidth=0.4,
+    )
+    axes[0].invert_yaxis()
     axes[0].set_title(
         f"Aggregated synthetic network",
         fontsize=12,
     )
 
     # Panel 2 (Row 0, Col 1): Heatmap of true IOT
-    img2 = axes[1].imshow(data_iot_np, cmap=cmap, norm=norm, aspect="auto")
+    img2 = axes[1].pcolormesh(
+        cell_edges,
+        cell_edges,
+        data_iot_np,
+        cmap=cmap,
+        norm=norm,
+        edgecolors="white",
+        linewidth=0.4,
+    )
+    axes[1].invert_yaxis()
     axes[1].set_title(
         f"Empirical IOT ({str(country_code)} {str(country_year)})",
         fontsize=12,
     )
 
-    # Shared colorbar
+    # The Nature style uses inward (and minor) ticks, which protrude into the
+    # heatmaps; drop all tick marks (keeping the labels).
+    for ax in axes:
+        ax.tick_params(which="both", length=0)
+        ax.minorticks_off()
+
+    # Label the axes with OECD ICIO sector codes (rows = supplier, cols = buyer).
+    if len(ICIO_SECTOR_CODES) == num_industries:
+        ticks = np.arange(num_industries)
+        for ax in axes:
+            ax.set_xticks(ticks)
+            ax.set_xticklabels(
+                ICIO_SECTOR_CODES,
+                rotation=45,
+                ha="right",
+                rotation_mode="anchor",
+                fontsize=5,
+            )
+            ax.set_yticks(ticks)
+            ax.set_yticklabels(ICIO_SECTOR_CODES, fontsize=5)
+            ax.set_xlabel("Buyer industry", fontsize=11)
+        axes[0].set_ylabel("Supplier industry", fontsize=11)
+    else:
+        print(
+            f"Warning: {len(ICIO_SECTOR_CODES)} sector codes do not match "
+            f"{num_industries} industries; leaving numeric axis labels."
+        )
+
+    # Shared colorbar, with ticks at the quantile boundaries labelled as
+    # dollar magnitudes (the matrices are in units of 100 million USD).
     cbar = fig.colorbar(
         img1,
         ax=[axes[0], axes[1]],
         orientation="horizontal",
-        pad=0.13,
+        pad=0.12,
         fraction=0.05,
-        format="%.3g",
     )
-    cbar.ax.set_title(
-        f"Monetary units: {monetary_unit/1e6:.0f} million USD",
-        fontsize=11,
-        pad=8,
-    )
-
+    cbar.set_ticks(quantiles)
+    cbar.set_ticklabels([format_usd_magnitude(q) for q in quantiles])
     if save_path is not None:
         plt.savefig(save_path, dpi="figure", bbox_inches="tight")
 
@@ -212,6 +393,7 @@ def visualize_joint_distributions(
     plt.show()
 
 
+@_with_science_style
 def visualize_network_for_overleaf_main(
     model: torch.Tensor,
     monetary_unit: float,
@@ -222,13 +404,14 @@ def visualize_network_for_overleaf_main(
     # ==========================================
     # Font size controls
     # ==========================================
-    TITLE_FONTSIZE = 9
-    LABEL_FONTSIZE = 8
-    TICK_FONTSIZE = 7
-    LEGEND_FONTSIZE = 7
-    COLORBAR_LABEL_FONTSIZE = 7
-    COLORBAR_TICK_FONTSIZE = 6
-    PANEL_LABEL_FONTSIZE = 10
+    TITLE_FONTSIZE = 10
+    LABEL_FONTSIZE = 9
+    TICK_FONTSIZE = 8
+    LEGEND_FONTSIZE = 8
+    COLORBAR_LABEL_FONTSIZE = 8
+    COLORBAR_TICK_FONTSIZE = 7
+    PANEL_LABEL_FONTSIZE = 11
+    CCDF_LINEWIDTH = 1.3
 
     # ==========================================
     # Colorbar layout controls
@@ -236,13 +419,27 @@ def visualize_network_for_overleaf_main(
     COLORBAR_PAD = 0.08
     COLORBAR_FRACTION = 0.045
 
+    # Panel labels are pinned top-left over a translucent box so they stay
+    # legible even on top of the dense density panels.
     label_style = {
         "fontsize": PANEL_LABEL_FONTSIZE,
         "fontweight": "bold",
-        "ha": "right",
+        "ha": "left",
+        "va": "top",
+        "bbox": dict(facecolor="white", alpha=0.7, edgecolor="none", pad=1.0),
     }
 
-    fig, axes = plt.subplots(2, 4, figsize=(9.5, 4.8), constrained_layout=True)
+    # Two stacked subfigures so each row gets its own descriptor; the top row
+    # holds the marginal (CCDF) panels, the bottom row the joint densities.
+    fig = plt.figure(figsize=(9.5, 5.8), constrained_layout=True)
+    subfig_top, subfig_bottom = fig.subfigures(2, 1, hspace=0.14)
+    axes = np.array([subfig_top.subplots(1, 4), subfig_bottom.subplots(1, 4)])
+    subfig_top.suptitle(
+        "Marginal distributions", fontweight="bold", fontsize=TITLE_FONTSIZE + 1
+    )
+    subfig_bottom.suptitle(
+        "Joint distributions", fontweight="bold", fontsize=TITLE_FONTSIZE + 1
+    )
 
     in_deg, out_deg = compute_degrees_from_model(model)
     _, edge_non_neg_weights, in_str, out_str = compute_strengths_from_model(model)
@@ -259,33 +456,65 @@ def visualize_network_for_overleaf_main(
     # Row 0, Col 0: CCDF of degrees
     x_in, y_in = series_to_ccdf_dict(in_deg_pd)
     x_out, y_out = series_to_ccdf_dict(out_deg_pd)
-    axes[0, 0].loglog(x_in[x_in > 0], y_in[x_in > 0], label="in-deg")
-    axes[0, 0].loglog(x_out[x_out > 0], y_out[x_out > 0], label="out-deg")
+    axes[0, 0].loglog(
+        x_in[x_in > 0],
+        y_in[x_in > 0],
+        color=COLOR_IN,
+        linestyle="-",
+        linewidth=CCDF_LINEWIDTH,
+        label="In-degree",
+    )
+    axes[0, 0].loglog(
+        x_out[x_out > 0],
+        y_out[x_out > 0],
+        color=COLOR_OUT,
+        linestyle="--",
+        linewidth=CCDF_LINEWIDTH,
+        label="Out-degree",
+    )
     axes[0, 0].set_title("CCDF degrees", fontsize=TITLE_FONTSIZE)
+    axes[0, 0].set_xlabel("Degree", fontsize=LABEL_FONTSIZE)
     axes[0, 0].set_ylabel(r"$P(X\geq x)$", fontsize=LABEL_FONTSIZE)
-    axes[0, 0].legend(fontsize=LEGEND_FONTSIZE)
+    axes[0, 0].legend(fontsize=LEGEND_FONTSIZE, loc="lower left")
 
     # Row 0, Col 1: CCDF of strengths
     x_in_str, y_in_str = series_to_ccdf_dict(in_str_pd)
     x_out_str, y_out_str = series_to_ccdf_dict(out_str_pd)
-    axes[0, 1].loglog(x_in_str[x_in_str > 0], y_in_str[x_in_str > 0], label="in-str")
     axes[0, 1].loglog(
-        x_out_str[x_out_str > 0], y_out_str[x_out_str > 0], label="out-str"
+        x_in_str[x_in_str > 0],
+        y_in_str[x_in_str > 0],
+        color=COLOR_IN,
+        linestyle="-",
+        linewidth=CCDF_LINEWIDTH,
+        label="In-strength",
     )
-    axes[0, 1].set_title("CCDF strengths (1 USD)", fontsize=TITLE_FONTSIZE)
+    axes[0, 1].loglog(
+        x_out_str[x_out_str > 0],
+        y_out_str[x_out_str > 0],
+        color=COLOR_OUT,
+        linestyle="--",
+        linewidth=CCDF_LINEWIDTH,
+        label="Out-strength",
+    )
+    axes[0, 1].set_title("CCDF strengths", fontsize=TITLE_FONTSIZE)
+    axes[0, 1].set_xlabel("Strength", fontsize=LABEL_FONTSIZE)
+    axes[0, 1].xaxis.set_major_formatter(usd_axis_formatter(suppress_sub_cent=False))
     axes[0, 1].set_ylabel(r"$P(X\geq x)$", fontsize=LABEL_FONTSIZE)
-    axes[0, 1].legend(fontsize=LEGEND_FONTSIZE)
+    axes[0, 1].legend(fontsize=LEGEND_FONTSIZE, loc="lower left")
 
     # Row 0, Col 2: CCDF of edge weights
     x, y = series_to_ccdf_dict(edge_pos_weights_pd)
-    axes[0, 2].loglog(x[x > 0], y[x > 0])
-    axes[0, 2].set_title("CCDF edge weights (1 USD)", fontsize=TITLE_FONTSIZE)
+    axes[0, 2].loglog(x[x > 0], y[x > 0], linewidth=CCDF_LINEWIDTH)
+    axes[0, 2].set_title("CCDF edge weights", fontsize=TITLE_FONTSIZE)
+    axes[0, 2].set_xlabel("Edge weight", fontsize=LABEL_FONTSIZE)
+    axes[0, 2].xaxis.set_major_formatter(usd_axis_formatter(suppress_sub_cent=False))
     axes[0, 2].set_ylabel(r"$P(X\geq x)$", fontsize=LABEL_FONTSIZE)
 
     # Row 0, Col 3: CCDF of pagerank
     x, y = series_to_ccdf_dict(pagerank_pd)
-    axes[0, 3].loglog(x, y)
+    axes[0, 3].loglog(x, y, linewidth=CCDF_LINEWIDTH)
     axes[0, 3].set_title("CCDF pagerank", fontsize=TITLE_FONTSIZE)
+    axes[0, 3].set_xlabel("Pagerank", fontsize=LABEL_FONTSIZE)
     axes[0, 3].set_ylabel(r"$P(X\geq x)$", fontsize=LABEL_FONTSIZE)
 
     # Row 1, Col 0: out-degree vs out-strength
@@ -296,14 +525,16 @@ def visualize_network_for_overleaf_main(
             np.logspace(np.log10(0.7), np.log10(1e5), 100),
             np.logspace(np.log10(1e-4), np.log10(1e11), 100),
         ],
+        cmap=LIGHTBLUE_TO_BLUE_CMAP,
         norm=LogNorm(),
     )
     axes[1, 0].set_xscale("log")
     axes[1, 0].set_yscale("log")
-    axes[1, 0].set_xlabel("out-degree", fontsize=LABEL_FONTSIZE)
-    axes[1, 0].set_ylabel("out-strength (1 USD)", fontsize=LABEL_FONTSIZE)
+    axes[1, 0].set_xlabel("Out-degree", fontsize=LABEL_FONTSIZE)
+    axes[1, 0].set_ylabel("Out-strength", fontsize=LABEL_FONTSIZE)
+    axes[1, 0].yaxis.set_major_formatter(usd_axis_formatter())
 
-    cbar = fig.colorbar(
+    cbar = subfig_bottom.colorbar(
         h[3],
         ax=axes[1, 0],
         location="bottom",
@@ -312,7 +543,7 @@ def visualize_network_for_overleaf_main(
         fraction=COLORBAR_FRACTION,
     )
     cbar.set_label("Counts", fontsize=COLORBAR_LABEL_FONTSIZE)
-    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE)
+    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE, which="both", length=0)
 
     # Row 1, Col 1: in-degree vs in-strength
     h = axes[1, 1].hist2d(
@@ -322,14 +553,16 @@ def visualize_network_for_overleaf_main(
             np.logspace(np.log10(0.7), np.log10(1e4), 100),
             np.logspace(np.log10(1e-6), np.log10(1e11), 100),
         ],
+        cmap=LIGHTBLUE_TO_BLUE_CMAP,
         norm=LogNorm(),
     )
     axes[1, 1].set_xscale("log")
     axes[1, 1].set_yscale("log")
-    axes[1, 1].set_xlabel("in-degree", fontsize=LABEL_FONTSIZE)
-    axes[1, 1].set_ylabel("in-strength (1 USD)", fontsize=LABEL_FONTSIZE)
+    axes[1, 1].set_xlabel("In-degree", fontsize=LABEL_FONTSIZE)
+    axes[1, 1].set_ylabel("In-strength", fontsize=LABEL_FONTSIZE)
+    axes[1, 1].yaxis.set_major_formatter(usd_axis_formatter())
 
-    cbar = fig.colorbar(
+    cbar = subfig_bottom.colorbar(
         h[3],
         ax=axes[1, 1],
         location="bottom",
@@ -338,7 +571,7 @@ def visualize_network_for_overleaf_main(
         fraction=COLORBAR_FRACTION,
     )
     cbar.set_label("Counts", fontsize=COLORBAR_LABEL_FONTSIZE)
-    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE)
+    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE, which="both", length=0)
 
     # Row 1, Col 2: out-degree vs in-degree
     h = axes[1, 2].hist2d(
@@ -348,14 +581,15 @@ def visualize_network_for_overleaf_main(
             np.logspace(np.log10(0.7), np.log10(1e5), 100),
             np.logspace(np.log10(0.7), np.log10(1e4), 100),
         ],
+        cmap=LIGHTBLUE_TO_BLUE_CMAP,
         norm=LogNorm(),
     )
     axes[1, 2].set_xscale("log")
     axes[1, 2].set_yscale("log")
-    axes[1, 2].set_xlabel("out-degree", fontsize=LABEL_FONTSIZE)
-    axes[1, 2].set_ylabel("in-degree", fontsize=LABEL_FONTSIZE)
+    axes[1, 2].set_xlabel("Out-degree", fontsize=LABEL_FONTSIZE)
+    axes[1, 2].set_ylabel("In-degree", fontsize=LABEL_FONTSIZE)
 
-    cbar = fig.colorbar(
+    cbar = subfig_bottom.colorbar(
         h[3],
         ax=axes[1, 2],
         location="bottom",
@@ -364,7 +598,7 @@ def visualize_network_for_overleaf_main(
         fraction=COLORBAR_FRACTION,
     )
     cbar.set_label("Counts", fontsize=COLORBAR_LABEL_FONTSIZE)
-    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE)
+    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE, which="both", length=0)
 
     # Row 1, Col 3: out-strength vs in-strength
     h = axes[1, 3].hist2d(
@@ -374,14 +608,17 @@ def visualize_network_for_overleaf_main(
             np.logspace(np.log10(1e-4), np.log10(1e11), 100),
             np.logspace(np.log10(1e-6), np.log10(1e11), 100),
         ],
+        cmap=LIGHTBLUE_TO_BLUE_CMAP,
         norm=LogNorm(),
     )
     axes[1, 3].set_xscale("log")
     axes[1, 3].set_yscale("log")
-    axes[1, 3].set_xlabel("out-strength (1 USD)", fontsize=LABEL_FONTSIZE)
-    axes[1, 3].set_ylabel("in-strength (1 USD)", fontsize=LABEL_FONTSIZE)
+    axes[1, 3].set_xlabel("Out-strength", fontsize=LABEL_FONTSIZE)
+    axes[1, 3].set_ylabel("In-strength", fontsize=LABEL_FONTSIZE)
+    axes[1, 3].xaxis.set_major_formatter(usd_axis_formatter())
+    axes[1, 3].yaxis.set_major_formatter(usd_axis_formatter())
 
-    cbar = fig.colorbar(
+    cbar = subfig_bottom.colorbar(
         h[3],
         ax=axes[1, 3],
         location="bottom",
@@ -390,36 +627,42 @@ def visualize_network_for_overleaf_main(
         fraction=COLORBAR_FRACTION,
     )
     cbar.set_label("Counts", fontsize=COLORBAR_LABEL_FONTSIZE)
-    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE)
+    cbar.ax.tick_params(labelsize=COLORBAR_TICK_FONTSIZE, which="both", length=0)
 
     # Panel labels
     panel_labels = ["(A)", "(B)", "(C)", "(D)", "(E)", "(F)", "(G)", "(H)"]
 
-    for ax, label in zip(axes[0], panel_labels[:4]):
-        ax.text(
-            0.97,
-            0.97,
-            label,
-            transform=ax.transAxes,
-            va="top",
-            **label_style,
-        )
+    # Pin every panel label to the top-left corner for fast scanning.
+    for ax, label in zip(axes.flat, panel_labels):
+        ax.text(0.03, 0.97, label, transform=ax.transAxes, **label_style)
 
-    # Second row: bottom-right
-    for ax, label in zip(axes[1], panel_labels[4:]):
-        ax.text(
-            0.97,
-            0.03,
-            label,
-            transform=ax.transAxes,
-            va="bottom",
-            **label_style,
-        )
-
-    # Apply tick font sizes and remove grids
-    for ax in fig.axes:
+    # Thin the major ticks to every two decades to cut clutter on the wide log
+    # axes, and standardize tick label sizes.
+    for ax in axes.flat:
+        ax.xaxis.set_major_locator(mticker.LogLocator(base=100.0))
+        ax.yaxis.set_major_locator(mticker.LogLocator(base=100.0))
         ax.tick_params(axis="both", labelsize=TICK_FONTSIZE)
-        ax.grid(False)
+
+    # Light gridlines on the CCDF (marginal) panels help readers gauge slopes.
+    for ax in axes[0]:
+        ax.grid(True, which="major", linewidth=0.3, alpha=0.4)
+    # Same light-gray major grid on the density (joint) panels, drawn on top of
+    # the mesh so it stays visible.
+    for ax in axes[1]:
+        ax.set_axisbelow(False)
+        ax.grid(True, which="major", linewidth=0.3, alpha=0.4, color="lightgray")
+
+    # Thin divider at the seam between the two subfigures to separate the
+    # marginal and joint rows.
+    fig.add_artist(
+        Line2D(
+            [0.05, 0.95],
+            [0.5, 0.5],
+            transform=fig.transFigure,
+            color="gray",
+            linewidth=0.8,
+        )
+    )
 
     if save_path is not None:
         plt.savefig(save_path, dpi="figure", bbox_inches="tight")

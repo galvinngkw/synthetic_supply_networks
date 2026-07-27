@@ -23,7 +23,7 @@ This repository builds synthetic supply networks by:
 Install (versions depend on your environment; a typical set is):
 
 ```bash
-pip install torch numpy pandas matplotlib pydantic pyyaml scipy python-igraph optuna tqdm
+pip install torch numpy pandas matplotlib pydantic pyyaml scipy python-igraph optuna tqdm SciencePlots
 ```
 
 - **torch**: sparse tensors, tensors throughout the pipeline
@@ -31,6 +31,7 @@ pip install torch numpy pandas matplotlib pydantic pyyaml scipy python-igraph op
 - **python-igraph**: directed configuration model
 - **optuna**: $\theta$ hyperparameter search (TPE sampler)
 - **tqdm**: progress bars in batch Optuna runs and Overleaf batch scripts
+- **SciencePlots**: matplotlib style sheets for publication-quality figures; used by the Overleaf plotting helpers (`network_generator/overleaf_figures/visualize_for_overleaf_figures.py`) with the `science` and `nature` styles
 
 ### Data
 
@@ -53,7 +54,7 @@ Default `conf/network/default.yaml` uses Hungary (`HUN`) and year `2015`.
 
 ## Configuration
 
-YAML defaults live under `conf/` and are merged by Pydantic models in `network_generator/config.py`:
+Default parameters live in YAML files under `conf/` and are loaded automatically by `NetworkConfig`, `TargetConfig`, and `TrainingConfig` in `network_generator/config.py`. **Edit these files** to change shared defaults (e.g. country, number of firms, Optuna trial count):
 
 | File | Role |
 |------|------|
@@ -61,31 +62,33 @@ YAML defaults live under `conf/` and are merged by Pydantic models in `network_g
 | `conf/target/default.yaml` | Targets for optimization loss (Hill exponents, moments, correlations, regression slopes, TLS terms) |
 | `conf/training/default.yaml` | Optuna: `num_experiments`, `n_trials`, and box constraints for each $\theta$ |
 
-Override in Python when constructing configs, for example:
+You can also **override YAML defaults in the notebook** by passing arguments when constructing the config objects (arguments take precedence over the YAML files):
 
 ```python
 network_config = NetworkConfig(num_firms=100_000, country_code="BEL")
+target_config = TargetConfig()
 training_config = TrainingConfig(n_trials=300)
 ```
+
+If you change `country_code`, ensure the matching IOT pickle exists under `data/` (e.g. `data/BEL.pkl`).
 
 ## Running the project
 
 ### Main notebook: `runner.ipynb`
 
-Full interactive workflow. Run cells top to bottom. At a high level:
+**Quick start:** Open `runner.ipynb` and run every cell from top to bottom. The notebook is self-contained—follow the markdown section headers and inline comments. With default settings you get a full synthetic network (degree sampling → topology → Optuna tuning → IOT-scaled weights → diagnostics and plots). You do not need to edit any code to try it once.
 
-1. **Imports** – `config`, `data_iot`, `initialization`, `metrics`, `utils`, `visualization`, `diagnostics`, and Optuna search class.
-2. **Configs** – `NetworkConfig`, `TargetConfig`, `TrainingConfig`.
-3. **Target tensors** – unpack `TargetConfig` for use in losses inside Optuna.
-4. **Burr parameters** – `get_parameters_for_burr_distribution` for in- and out-degree sampling.
-5. **Out- / in-degree sequences** – generate and resample until validation (Hill, variance, mean, max) passes.
-6. **Reorder** – `triangular_wedge_matching` with `noise_amount_for_reordering_burrkiko`.
-7. **Topology** – `directed_configuration_model`; recover degrees with `compute_degrees_from_model`.
-8. **Strengths** – `generate_initial_strength_fitnesses`.
-9. **IOT** – `load_input_output_table` and `assign_firms_to_industries` (assignment is **proportional to industry sales**, with integer rounding adjusted to hit `num_firms`; rerunning changes the firm–industry map).
-10. **Optuna** – build `optuna_search_single_experiment`, call `optimize()`, inspect `get_trials_dataframe()` and `plot_figures()`.
-11. **Post-process** – a later cell builds a scaled network with `populate_weights_fourparams` and `scale_by_iot` (the notebook currently uses the $\theta$ values from `network_config` by default; you can plug in `best_optuna_stats` for the $\theta$ fields if desired).
-12. **Diagnostics & plots** – `compute_network_stats`, `visualize_network`, degree/strength heatmaps, aggregated IOT vs truth, CCDFs.
+**Changing parameters:** Use the config cell near the top of the notebook (see [Configuration](#configuration) above). Either edit the YAML files under `conf/`, or pass overrides to `NetworkConfig()`, `TargetConfig()`, and `TrainingConfig()` as shown there.
+
+**Pipeline overview** (what the notebook runs, in order):
+
+1. Load configs and target tensors.
+2. Sample and validate Burr in-/out-degree sequences; reorder with `triangular_wedge_matching`.
+3. Build topology with the directed configuration model; generate initial strength fitnesses.
+4. Load the input–output table and assign firms to industries (proportional to industry sales; rerunning changes the firm–industry map).
+5. Run Optuna to tune the four $\theta$ parameters; inspect trial results and plots.
+6. Build the final weighted network with `populate_weights_fourparams` and `scale_by_iot` (by default using $\theta$ from `network_config`; you can substitute values from `best_optuna_stats` instead).
+7. Run diagnostics and visualizations (`compute_network_stats`, `visualize_network`, heatmaps, IOT comparison, CCDFs).
 
 Degree resampling loops and Optuna with many trials can be slow for large `num_firms`.
 
