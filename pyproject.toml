@@ -1,0 +1,44 @@
+[project]
+name = "synthetic-supply-networks"
+version = "0.1.0"
+description = "PyTorch-based generator for synthetic firm-level supply networks."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch>=2.2",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "matplotlib>=3.7",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "scipy>=1.13",
+    "igraph>=0.10",
+    "tqdm>=4.66",
+    "optuna>=4.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.28",
+    "jupyterlab>=4.0",
+    "notebook>=7.0",
+]
+paper = [
+    "seaborn>=0.12",
+    "SciencePlots>=2.2",
+]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["network_generator"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/network_generator",
+    "/conf",
+    "/README.md",
+    "/pyproject.toml",
+]

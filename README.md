@@ -16,49 +16,42 @@ This repository builds synthetic supply networks by:
 
 **Metrics and diagnostics**: `network_generator/metrics.py` implements degrees, strengths, Hill exponents, OLS/TLS regressions, PageRank, correlations, and related quantities. `diagnostics.compute_network_stats` returns a wide property table for a weighted network.
 
-## Requirements
+## Installation
 
-### Python packages
-
-Install (versions depend on your environment; a typical set is):
+Dependencies are declared in `pyproject.toml` (Python ≥ 3.12). The recommended installer is [`uv`](https://docs.astral.sh/uv/); see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/) if you do not have it yet.
 
 ```bash
-pip install torch numpy pandas matplotlib seaborn pydantic pyyaml scipy python-igraph optuna tqdm SciencePlots
+git clone <repository-url>
+cd synthetic_supply_networks
+uv sync --group dev --group paper
 ```
 
-Or install pinned versions from `requirements.txt`:
+- `uv sync` installs the core scientific stack and the editable `network_generator` package.
+- `--group dev` adds Jupyter tooling (`ipykernel`, `jupyterlab`, `notebook`) for `runner.ipynb` and the notebooks under `additional_notebooks/`.
+- `--group paper` adds `seaborn` and `SciencePlots` for Overleaf figure helpers under `network_generator/overleaf_figures/`.
+
+Without `uv`, you can install with pip from the same `pyproject.toml`:
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
+pip install ipykernel jupyterlab notebook seaborn SciencePlots
 ```
 
-- **torch**: sparse tensors, tensors throughout the pipeline
+Key packages and their roles:
+
+- **torch**: sparse tensors throughout the pipeline
 - **scipy**: Burr parameter solving (`optimize.root_scalar`, `stats.burr12`)
-- **python-igraph**: directed configuration model
+- **igraph**: configuration model and compute network properties
 - **optuna**: $\theta$ hyperparameter search (TPE sampler)
 - **tqdm**: progress bars in batch Optuna runs and Overleaf batch scripts
-- **seaborn**: statistical plotting used by the Overleaf figure helpers
-- **SciencePlots**: matplotlib style sheets for publication-quality figures; used by the Overleaf plotting helpers (`network_generator/overleaf_figures/visualize_for_overleaf_figures.py`) with the `science` and `nature` styles
+- **pydantic** / **PyYAML**: typed configs loaded from `conf/`
+- **seaborn** / **SciencePlots**: publication plotting in the Overleaf helpers (`science` / `nature` styles)
 
 ### Data
 
 Place OECD inter-country input–output tables as pickles under `data/`, named `{COUNTRY_CODE}.pkl` (e.g. `HUN.pkl`). Each file is expected to map year → industry × industry matrix in millions USD; the loader rescales by `monetary_unit` in `NetworkConfig` (see `data_iot.load_input_output_table`).
 
-Default `conf/network/default.yaml` uses Hungary (`HUN`) and year `2015`.
-
-## Installation
-
-1. Clone the repository and enter the project root:
-
-   ```bash
-   git clone <repository-url>
-   cd synthetic_supply_networks
-   ```
-
-2. Install dependencies (see above).
-
-3. Ensure `data/{country_code}.pkl` exists for the country and years you use in `NetworkConfig`.
-
+Default `conf/network/default.yaml` uses Hungary (`HUN`) and year `2015`. Ensure `data/{country_code}.pkl` exists for the country and years you use in `NetworkConfig`.
 ## Configuration
 
 Default parameters live in YAML files under `conf/` and are loaded automatically by `NetworkConfig`, `TargetConfig`, and `TrainingConfig` in `network_generator/config.py`. **Edit these files** to change shared defaults (e.g. country, number of firms, Optuna trial count):
@@ -167,6 +160,7 @@ synthetic_supply_networks/
 ├── figures_for_main_doc/          # Tensors/plots for main-paper figures
 ├── experiments_zeta=-0.14/        # Experiment CSVs/plots for SI figures
 ├── *.csv                          # Supporting CSVs for additional_notebooks
+├── pyproject.toml                 # Project metadata and dependencies
 ├── runner.ipynb                   # Full interactive workflow
 └── README.md
 ```
