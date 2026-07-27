@@ -1,0 +1,15 @@
+torch==2.2.0
+numpy==1.26.4
+pandas==2.1.0
+scipy==1.13.0
+matplotlib==3.7.2
+seaborn==0.12.2
+igraph==0.10.4
+optuna==4.8.0
+tqdm==4.66.1
+pydantic==2.5.3
+PyYAML==6.0.1
+SciencePlots==2.2.2
+jupyter==1.0.0
+ipykernel==6.28.0
+notebook==7.0.8

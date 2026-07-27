@@ -23,7 +23,13 @@ This repository builds synthetic supply networks by:
 Install (versions depend on your environment; a typical set is):
 
 ```bash
-pip install torch numpy pandas matplotlib pydantic pyyaml scipy python-igraph optuna tqdm SciencePlots
+pip install torch numpy pandas matplotlib seaborn pydantic pyyaml scipy python-igraph optuna tqdm SciencePlots
+```
+
+Or install pinned versions from `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
 ```
 
 - **torch**: sparse tensors, tensors throughout the pipeline
@@ -31,6 +37,7 @@ pip install torch numpy pandas matplotlib pydantic pyyaml scipy python-igraph op
 - **python-igraph**: directed configuration model
 - **optuna**: $\theta$ hyperparameter search (TPE sampler)
 - **tqdm**: progress bars in batch Optuna runs and Overleaf batch scripts
+- **seaborn**: statistical plotting used by the Overleaf figure helpers
 - **SciencePlots**: matplotlib style sheets for publication-quality figures; used by the Overleaf plotting helpers (`network_generator/overleaf_figures/visualize_for_overleaf_figures.py`) with the `science` and `nature` styles
 
 ### Data
