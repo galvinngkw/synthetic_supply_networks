@@ -1,0 +1,11 @@
+# Optuna search paramters
+num_experiments: 100
+n_trials: 200
+theta_k_in_upper_bound: 2.0
+theta_k_in_lower_bound: -2.0
+theta_k_out_upper_bound: 2.0
+theta_k_out_lower_bound: -2.0
+theta_f_in_upper_bound: 2.0
+theta_f_in_lower_bound: -2.0
+theta_f_out_upper_bound: 2.0
+theta_f_out_lower_bound: -2.0

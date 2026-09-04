@@ -1,0 +1,33 @@
+# Network structure and initialization
+num_firms: 100000
+monetary_unit: 1.0e+8
+country_code: "HUN"
+country_year: 2015
+
+# Burr degree generation
+burr_alpha_outdeg: 2.0
+burr_var_log_outdeg: 10.0
+burr_alpha_indeg: 3.0
+burr_var_log_indeg: 3.0
+burr_max_indeg: 0.05
+burr_max_outdeg: 0.4
+
+# Burr degree reordering
+noise_amount_for_reordering_burrkiko: -0.14
+
+# Parameters for lognormal strength fitnesses generation
+mean_for_gen_lognorm_fi: 0
+mean_for_gen_lognorm_fo: 0
+corr_lognorm_gen_fi_fo: 0.8
+
+# Weight population parameters
+theta_k_in_value: 0
+theta_k_out_value: -0.7
+theta_f_in_value: -1.3
+theta_f_out_value: -1.3
+
+# Percentile thresholds for computing Hill exponents
+threshold_percentile_for_hill_deg: 0.99
+threshold_percentile_for_hill_strength: 0.98
+threshold_percentile_for_hill_weight: 0.99849
+threshold_percentile_for_hill_influence: 0.96

@@ -1,0 +1,29 @@
+# Target network properties for optimization
+
+# Hill exponents
+target_hill_in_deg: 2.5
+target_hill_out_deg: 1.5
+target_hill_weight_distribution: 1.15
+target_hill_in_str: 1.0
+target_hill_out_str: 1.0
+
+# Average connection
+target_average_connection: 40.0
+target_variance_si: 9.0
+target_variance_so: 8.0
+
+# Correlations
+target_so_ko_corr: 0.5
+target_si_ki_corr: 0.75
+target_si_so_corr: 0.5
+target_ki_ko_corr: 0.55
+
+# Regression coefficients
+target_so_ko_regcoeff: 0.76
+target_ko_so_regcoeff: 0.33
+target_si_ki_regcoeff: 1.4
+target_ki_si_regcoeff: 0.4
+
+# TLS targets
+target_tls_str: 1.0
+target_tls_deg: 0.7
