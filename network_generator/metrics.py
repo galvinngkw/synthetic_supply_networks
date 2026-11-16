@@ -218,17 +218,20 @@ def compute_hill_exponent(
     threshold_quantile: float,
     is_degree: bool = False,
 ) -> torch.Tensor:
-    """Estimate the tail exponent of a complementary cumulative distribution function (CCDF).
+    r"""Estimate the CCDF tail exponent using the Hill estimator.
 
     For a power-law tail, the PDF and CCDF exponents differ by one:
         p(x) ~ x^(-alpha)          (probability density function)
         P(X >= x) ~ x^(-(alpha-1)) (complementary cumulative distribution function)
+        
+    Clauset et al. 2009, Eq. 3.1 gives the Hill estimator \widehat{\alpha} of the PDF exponent alpha for continuous data:
+        \widehat{\alpha} = 1 + n * [sum_i^n log(x_i / x_min)]^-1.
+    Here, x_min is the specified quantile threshold, and n is the number of observations x_i satisfying x_i >= x_min.
 
-    Clauset et al. 2009, Eq. 3.1 gives the Hill estimator for the PDF exponent alpha:
-        alpha = 1 + n * [sum_i^n log(x_i / x_min)]^-1.
-
-    This function returns the CCDF exponent, alpha - 1, by omitting the leading 1:
-        alpha - 1 = n * [sum_i^n log(x_i / x_min)]^-1.
+    This function returns the estimated CCDF exponent, \widehat{\alpha} - 1, by omitting the leading 1:
+        \widehat{\alpha} - 1 = n * [sum_i^n log(x_i / x_min)]^-1.
+        
+    For discrete data, the logarithm denominator is replaced by x_min - 0.5. The selection criterion remains x_i >= x_min.
 
     Args:
         distribution: Input distribution tensor.
@@ -236,7 +239,7 @@ def compute_hill_exponent(
         is_degree: If True, adjusts x_min by -0.5 (for discrete degrees).
 
     Returns:
-        CCDF tail exponent (alpha - 1) as a scalar tensor.
+        Estimated CCDF tail exponent \widehat{\alpha} - 1 as a scalar tensor.
     """
     threshold = compute_quantiles(distribution.to(torch.float32), threshold_quantile)
 
