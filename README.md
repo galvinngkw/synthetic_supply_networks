@@ -49,9 +49,45 @@ Key packages and their roles:
 
 ### Data
 
-Place OECD inter-country input–output tables as pickles under `data/`, named `{COUNTRY_CODE}.pkl` (e.g. `HUN.pkl`). Each file is expected to map year → industry × industry matrix in millions USD; the loader rescales by `monetary_unit` in `NetworkConfig` (see `data_iot.load_input_output_table`).
+The generator targets a country's industry × industry input–output table from the OECD ICIO 2021 edition (66 countries, 45 industries, 1995–2018). Each table is the matrix of **total intermediate use**: entry (i, j) is what industry j of the country buys from industry i of every supplier country, domestic and imported, in millions of USD. China's and Mexico's processing-trade splits (CN1/CN2, MX1/MX2) are summed into CHN and MEX; ROW is dropped.
 
-Default `conf/network/default.yaml` uses Hungary (`HUN`) and year `2015`. Ensure `data/{country_code}.pkl` exists for the country and years you use in `NetworkConfig`.
+`data_iot.load_input_output_table` finds a table in this order:
+
+1. `data/{COUNTRY_CODE}.pkl` (a dict year → matrix), so existing checkouts and hand-made tables keep working;
+2. the local cache, `~/.cache/synthetic_supply_networks/oecd_icio` (override with `SSN_DATA_CACHE`);
+3. the project mirror, downloaded on first use. The mirror's manifest is checked against the sha256 pinned in `network_generator/oecd_icio/releases.yaml` and every table against that manifest, so a given commit always runs on the same numbers. Mirror tables are `.npz` files read without pickle.
+
+To download tables ahead of time (e.g. before going offline): `python -m network_generator.oecd_icio fetch HUN DEU` (all countries if none given).
+
+If a table is in none of these places, the error message explains how to rebuild it from the raw OECD files (below).
+
+**Editions.** Each OECD edition is a separate release in `network_generator/oecd_icio/releases.yaml`, with its own pinned source files, mirror and cache; choose one with `release=` (`generate_synthetic_network`, `load_input_output_table`) or `--release` on the command line. A local folder is only used for the release named in its `MANIFEST.json` (a folder without one counts as `oecd_icio_2021`), so asking for one edition never returns another's tables.
+
+| Release | Industries | Countries | Years | Notes |
+|---|---|---|---|---|
+| `oecd_icio_2021` (default) | 45 | 66 | 1995–2018 | used in the paper; cells rounded to 0.1 million USD, as in the tables the paper was run on; CSV checksums pinned per year |
+| `oecd_icio_2025` | 50 | 80 | 2006–2022 | release 2, EXT bundles; the 1995–2005 bundles are not registered yet |
+
+The generator does not depend on the number of industries; only the sector labels in `network_generator/overleaf_figures` assume the 45-industry 2021 list.
+
+#### Rebuilding the tables from the OECD source
+
+The mirror is produced by this same build, and rebuilding is also how to use another edition or a different table definition. OECD's servers usually refuse scripted downloads, so download the CSV bundles from <http://oe.cd/icio> in a browser and pass them in:
+
+```bash
+python -m network_generator.oecd_icio build \
+    --bundle ~/Downloads/ICIO2021_1995-1999.zip \
+    --bundle ~/Downloads/ICIO2021_2015-2018.zip \
+    --out data
+```
+
+Bundle checksums are pinned in `network_generator/oecd_icio/releases.yaml`; an unpinned or changed bundle stops the build unless you pass `--allow-unpinned` (and then record its sha256 there). Bundles are cached by checksum under `~/.cache/synthetic_supply_networks/oecd_icio` (override with `SSN_DATA_CACHE`). The build writes `data/MANIFEST.json` with the checksums of every source bundle, CSV and output table.
+
+To publish a build to the mirror: `python -m network_generator.oecd_icio package <build> <assets>` writes `{ISO3}.npz` and a `MANIFEST.json` that keeps the source checksums; upload the folder's contents to the release named by `mirror.url` and pin the printed `manifest_sha256` in `releases.yaml`.
+
+To check a fresh build against the committed tables, build into another folder and run `python -m network_generator.oecd_icio compare <built> data`. The regression test does the same when `ICIO2021_CSV_DIR` points to a folder of ICIO 2021 CSVs: `ICIO2021_CSV_DIR=... pytest tests/test_oecd_icio.py`.
+
+If you use these tables, cite OECD (2021), OECD Inter-Country Input-Output Database, <http://oe.cd/icio>.
 ## Configuration
 
 Default parameters live in YAML files under `conf/` and are loaded automatically by `NetworkConfig`, `TargetConfig`, and `TrainingConfig` in `network_generator/config.py`. **Edit these files** to change shared defaults (e.g. country, number of firms, Optuna trial count):
@@ -73,6 +109,19 @@ training_config = TrainingConfig(n_trials=300)
 If you change `country_code`, ensure the matching IOT pickle exists under `data/` (e.g. `data/BEL.pkl`).
 
 ## Running the project
+
+### Quick start: one call
+
+```python
+from network_generator.pipeline import generate_synthetic_network
+
+result = generate_synthetic_network("HUN", 2015, num_firms=100_000, seed=1)
+result.iot_report()          # industry aggregate vs the OECD target (incl. flow lost to industry pairs without edges)
+result.stats()               # network statistics vs the empirical targets in conf/target
+result.save("out/hun_2015")  # edges, firm -> industry map, target table, run.json
+```
+
+This fetches the target table (see Data), draws Burr degrees until they pass the paper's acceptance bounds (`DegreeAcceptance`; use `DegreeAcceptance.none()` for small test networks), builds the topology, populates weights and rescales them to the table. Pass `optimize=True` to tune the four weight exponents with Optuna (`conf/training`) instead of using the values in `conf/network`. A 100,000-firm run without Optuna takes about 20 seconds on a laptop.
 
 ### Main notebook: `runner.ipynb`
 
@@ -147,6 +196,8 @@ synthetic_supply_networks/
 │   ├── diagnostics.py             # compute_network_stats → DataFrame
 │   ├── visualization.py           # Network / IOT visualization
 │   ├── utils.py                   # firm_model_to_iot, scale_by_iot
+│   ├── pipeline.py                # generate_synthetic_network: country/year → synthetic network
+│   ├── oecd_icio/                 # OECD ICIO tables: build from raw files, mirror, cache
 │   ├── optuna_search/
 │   │   ├── search_algo_fourparams.py   # optuna_search_single_experiment
 │   │   └── run_multiple_times.py       # run_optuna_theta_multiple_experiments

@@ -22,6 +22,7 @@ dev = [
     "ipykernel>=6.28",
     "jupyterlab>=4.0",
     "notebook>=7.0",
+    "pytest>=8.0",
 ]
 paper = [
     "seaborn>=0.12",
@@ -42,3 +43,7 @@ include = [
     "/README.md",
     "/pyproject.toml",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
