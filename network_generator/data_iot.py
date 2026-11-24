@@ -1,5 +1,5 @@
 """
-Load Input-Output Table data from pickle file.
+Load input-output tables (local, cached or from the mirror).
 Assign firms to industries.
 """
 
@@ -9,36 +9,39 @@ import random
 import numpy as np
 import torch
 
+from network_generator.config import DATA_PATH
+from network_generator.oecd_icio import DEFAULT_RELEASE, TableStore
+
 
 def load_input_output_table(
-    data_path: str | Path,
-    country_code: str,
-    year: int,
-    monetary_unit: float,
-) -> tuple[torch.Tensor, np.ndarray]:
-    """Load Input-Output Table data from pickle file.
+    data_path: str | Path | None = DATA_PATH,
+    country_code: str = "HUN",
+    year: int = 2015,
+    monetary_unit: float = 1e8,
+    release: str = DEFAULT_RELEASE,
+) -> tuple[torch.Tensor, np.ndarray, int]:
+    """Load a country's industry x industry input-output table.
+
+    The table is looked up in ``data_path`` first (a folder of ``{COUNTRY}.pkl`` files, or one such file), then in the local cache, then downloaded from the pinned mirror of ``release`` (see ``network_generator.oecd_icio.store``). The default is the repository's ``data/`` folder when running from a checkout, and no folder when the package is installed. Pass ``data_path=None`` to skip the local folder.
 
     Args:
-        data_path: Path to the data directory or pickle file.
-        country_code: Country code (e.g., "BEL").
+        data_path: Folder of ``{COUNTRY}.pkl`` files, a single pickle, or None. A table file that exists there must be valid and hold ``year``.
+        country_code: ISO3 country code (e.g., "BEL").
         year: Year of the IOT data.
         monetary_unit: Unit for monetary values (default 100M USD).
+        release: OECD ICIO release used when the table is not found locally.
 
     Returns:
-        Tuple of (iot_tensor, iot_numpy) with rescaled values.
+        Tuple of (iot_tensor, iot_numpy, num_industries) with values in ``monetary_unit``.
     """
-    data_path = Path(data_path)
-
-    if data_path.is_file():
-        pkl_path = data_path
+    if data_path is not None and Path(data_path).is_file():
+        with open(data_path, "rb") as f:
+            table = pickle.load(f)[year]
     else:
-        pkl_path = data_path / f"{country_code}.pkl"
-
-    with open(pkl_path, "rb") as f:
-        data = pickle.load(f)
+        table = TableStore(release).get(country_code, year, data_dir=data_path)
 
     # OECD-ICIO data is in 1 million USD, convert to monetary_unit
-    iot_numpy = data[year] * 1e6 / monetary_unit
+    iot_numpy = np.asarray(table, dtype=np.float32) * 1e6 / monetary_unit
     iot_tensor = torch.tensor(iot_numpy, dtype=torch.float32)
     num_industries = iot_tensor.size(dim=0)
 

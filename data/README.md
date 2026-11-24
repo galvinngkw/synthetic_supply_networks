@@ -27,6 +27,10 @@ input_output_tensor, input_output_array, num_industries = load_input_output_tabl
 
 The exact function arguments and scaling behavior are defined by the current implementation and configuration.
 
+## Provenance and rebuilding
+
+The tables are built by `network_generator.oecd_icio` from the OECD ICIO 2021 CSVs, whose per-year checksums are pinned in `network_generator/oecd_icio/releases.yaml`. Each table is total intermediate use (inputs from every supplier country, domestic and imported), with China's and Mexico's processing-trade splits summed into CHN and MEX, and cells rounded to 0.1 million USD. [`MANIFEST.json`](MANIFEST.json) records the source checksums, the industry order and the checksum of every file here. To rebuild or check them, see "Rebuilding the tables from the OECD source" in the [main README](../README.md).
+
 ## Terms and attribution
 
 The MIT License at the repository root covers the project software, not these data files. Data use is governed by the [OECD Terms & Conditions](https://www.oecd.org/en/about/terms-conditions.html), including its provisions concerning Data, and the [OECD Open Access Policy](https://www.oecd.org/en/about/oecd-open-by-default-policy.html). Check the original source metadata for third-party ownership, additional restrictions, and any source-specific citation requirements before reusing or redistributing a table.

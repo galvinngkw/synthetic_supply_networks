@@ -1,0 +1,68 @@
+oecd_icio_2021:
+  name: OECD Inter-Country Input-Output Database, 2021 edition
+  citation: OECD (2021), OECD Inter-Country Input-Output Database, http://oe.cd/icio
+  csv_pattern: ^ICIO2021_(?P<year>\d{4})\.csv$
+  column_aggregates:
+    CN1: CHN
+    CN2: CHN
+    MX1: MEX
+    MX2: MEX
+  exclude_countries:
+  - ROW
+  # The tables the paper was run on were rounded to 0.1 million USD; keep doing so for comparability.
+  round_decimals: 1
+  mirror:
+    url: https://github.com/galvinngkw/synthetic_supply_networks/releases/download/data-oecd-icio-2021-v1
+    manifest_sha256: null
+  # Per-year CSV checksums (the browser unzips the bundles, so these are what can be checked).
+  csv_sha256:
+    1995: 0bb86a4ce10f3b04b01a192d635e6757b77dbcae68708e9376bae2365da8345b
+    1996: c369cb5d7def8cf956ba850c2eb349ada76094ad737ef649c6bd614e2d19db0f
+    1997: d5194d8cad0481068f4d42a14ddc93c2a1e022d5d0e3cc1dbaf5ef979c5cf451
+    1998: dd0dbedd087ac32a2b30415ae5d6d499e6fee995208899494e78eca53ce24868
+    1999: f0c30b702eebd879092530667ecda7c92d0ae066b14a28bcc87e496e787111bb
+    2000: 0f30f0c9a00aae5c9863a1a840fe49fe3c29e5833418369ae3ca986bac6dc5c4
+    2001: 91d402988c7c7f24c3bef614442234ac0b9db0fb5adfc71e6f29f164db2036fb
+    2002: 0f721058120d32fb9cba3301971a2cb614704d2666e88f19cc9458bcd055909d
+    2003: da5b7a74926569d9b8d2c374dce136ad33090a89881be6d9f2d062eefeb97532
+    2004: f5cc66574ef62b959467952ba086c38d352db85fb3046f19cbc6dafb36428d82
+    2005: 3dfe4345e5f72eda2fae780ffbb06bb1853c7b63af7088661176272dcc9cbc59
+    2006: bf5dee879b3d2d19f9bb6405164480a6e595755ecc3f702ea113c0aaa7072c53
+    2007: 988743135455b5d7441ca77a21d875f9764cf0a0753bb006cb17e5942b48ed90
+    2008: dc6050ab7f34f239ca96ad65a0b93f1ce14d0e227d512fad1e71e78653458627
+    2009: 7311768ff25d7037048610239e521f602884e7005d8a41d3a4c3e99c75cf1cb3
+    2010: 3ca814c3351ecf2cfd42f5f84d95efc78f064f6693612bf22af9bd0ea3d81eb0
+    2011: 9bf1788f77c471715eaba62e6e5c938f12219826cf5818f95cf4ca1523000c37
+    2012: 3c9816e4bf4d48de11e43a186b5fa9ee5bae6ba109591fbd078c8c2cba2a8912
+    2013: 96b69419081290e2aecdbd84d0a77fa33e6cf691c99bf61775bc5a66f4255123
+    2014: 025f3d2c96cf080ffead8e67867b4e26258d3c5b4528f96ee16431814bd159d8
+    2015: 5caaeea57be99df2eff91fa9350959f341c87d13c860b8461e541a8f71a4882d
+    2016: afde675da7ecc010881fa41966d6fbbecc4deccfd574360496f975ec9f2127ff
+    2017: 0bd753cd5676b6eede5761f2b6d311cd11840effa48fe0fac1d94c495dfd614f
+    2018: 2c37a33f8932349368f5f7af008f92d3fe76914a3afa9dc7abf0ea8379736cbe
+oecd_icio_2025:
+  name: OECD Inter-Country Input-Output Database, 2025 edition (release 2), EXT bundles
+  citation: OECD (2025), OECD Inter-Country Input-Output Database, http://oe.cd/icio
+  csv_pattern: ^(?P<year>\d{4})\.csv$
+  column_aggregates:
+    CN1: CHN
+    CN2: CHN
+    MX1: MEX
+    MX2: MEX
+  exclude_countries:
+  - ROW
+  mirror:
+    url: https://github.com/galvinngkw/synthetic_supply_networks/releases/download/data-oecd-icio-2025-v1
+    manifest_sha256: null
+  bundles:
+  # sha256 of each OECD EXT zip as published; a download must match exactly.
+  - bundle_id: 2006-2010
+    url: https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_EXT.zip
+    sha256: 343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533
+  - bundle_id: 2011-2015
+    url: https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2011-2015_EXT.zip
+    sha256: 171c74914cdb1d6952492441f2a771a1a1a65cd3eba015dbf8522754b1e11b0a
+  - bundle_id: 2016-2022
+    url: https://stats.oecd.org/wbos/fileview2.aspx?IDFile=c95e1402-462c-4fc7-951f-a2df3fb1d8f3
+    sha256: 80ea6fb868ccaafbdd0f430532e638f0971b3b6712a2fc7eb08d88fff6405c4e
+  # 1995-2005 bundles: URLs and checksums still to be recorded.
