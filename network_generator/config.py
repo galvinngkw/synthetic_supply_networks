@@ -7,7 +7,17 @@ import yaml
 from pydantic import BaseModel, Field
 
 DATA_PATH = Path(__file__).parents[1] / "data"
-CONF_PATH = Path(__file__).parents[1] / "conf"
+
+
+def _find_conf_path() -> Path:
+    """Default YAMLs: the repo's top-level ``conf/`` in a checkout, else the copy packaged inside ``network_generator`` (pip installs)."""
+    checkout = Path(__file__).parents[1] / "conf"
+    if checkout.is_dir():
+        return checkout
+    return Path(__file__).parent / "conf"
+
+
+CONF_PATH = _find_conf_path()
 
 # Type aliases for common constraints
 PositiveInt = Annotated[int, Field(gt=0)]

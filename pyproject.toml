@@ -38,6 +38,10 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["network_generator", "paper"]
 
+# Ship the default YAMLs inside the package so a pip install can load them (see config._find_conf_path).
+[tool.hatch.build.targets.wheel.force-include]
+"conf" = "network_generator/conf"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/network_generator",
