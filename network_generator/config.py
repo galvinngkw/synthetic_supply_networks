@@ -6,15 +6,19 @@ from typing import Annotated, Optional
 import yaml
 from pydantic import BaseModel, Field
 
-DATA_PATH = Path(__file__).parents[1] / "data"
+_REPO_ROOT = Path(__file__).parents[1]
+# True when running from a clone of the repository rather than an installed wheel.
+IN_CHECKOUT = (_REPO_ROOT / "pyproject.toml").is_file()
+
+# The repository's data/ folder; None when installed (tables then come from the cache or mirror).
+DATA_PATH: Path | None = _REPO_ROOT / "data" if IN_CHECKOUT else None
 
 
-def _find_conf_path() -> Path:
+def _find_conf_path(package_dir: Path = Path(__file__).parent, in_checkout: bool = IN_CHECKOUT) -> Path:
     """Default YAMLs: the repo's top-level ``conf/`` in a checkout, else the copy packaged inside ``network_generator`` (pip installs)."""
-    checkout = Path(__file__).parents[1] / "conf"
-    if checkout.is_dir():
-        return checkout
-    return Path(__file__).parent / "conf"
+    if in_checkout:
+        return package_dir.parent / "conf"
+    return package_dir / "conf"
 
 
 CONF_PATH = _find_conf_path()

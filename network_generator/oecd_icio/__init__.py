@@ -10,5 +10,21 @@ from network_generator.oecd_icio.build import (
     load_releases,
     total_use_by_country,
 )
+from network_generator.oecd_icio.store import (
+    DEFAULT_RELEASE,
+    TableNotFound,
+    TableStore,
+    get_table,
+)
 
-__all__ = ["Release", "build", "compare", "load_releases", "total_use_by_country"]
+__all__ = [
+    "DEFAULT_RELEASE",
+    "Release",
+    "TableNotFound",
+    "TableStore",
+    "build",
+    "compare",
+    "get_table",
+    "load_releases",
+    "total_use_by_country",
+]

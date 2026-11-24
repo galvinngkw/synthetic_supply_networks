@@ -49,9 +49,9 @@ class Release:
     mirror_url: str | None = None
     mirror_manifest_sha256: str | None = None
     csv_sha256: dict[int, str] = field(default_factory=dict)
+    """Per-year CSV pins, for editions whose bundles get unzipped on download (browsers do this) so bundle checksums can't be checked."""
     round_decimals: int | None = None
     """Round each table cell (millions USD) to this many decimals before storing. The 2021 release uses 1 to match the tables the paper was run on."""
-    """Per-year CSV pins, for editions whose bundles get unzipped on download (browsers do this) so bundle checksums can't be checked."""
 
 
 def load_releases(path: Path = RELEASES_PATH) -> dict[str, Release]:

@@ -40,22 +40,6 @@ oecd_icio_2021:
     2016: afde675da7ecc010881fa41966d6fbbecc4deccfd574360496f975ec9f2127ff
     2017: 0bd753cd5676b6eede5761f2b6d311cd11840effa48fe0fac1d94c495dfd614f
     2018: 2c37a33f8932349368f5f7af008f92d3fe76914a3afa9dc7abf0ea8379736cbe
-  bundles:
-  - bundle_id: 1995-1999
-    url: null
-    sha256: null
-  - bundle_id: 2000-2004
-    url: null
-    sha256: null
-  - bundle_id: 2005-2009
-    url: null
-    sha256: null
-  - bundle_id: 2010-2014
-    url: null
-    sha256: null
-  - bundle_id: 2015-2018
-    url: null
-    sha256: null
 oecd_icio_2025:
   name: OECD Inter-Country Input-Output Database, 2025 edition (release 2), EXT bundles
   citation: OECD (2025), OECD Inter-Country Input-Output Database, http://oe.cd/icio
@@ -71,7 +55,7 @@ oecd_icio_2025:
     url: https://github.com/galvinngkw/synthetic_supply_networks/releases/download/data-oecd-icio-2025-v1
     manifest_sha256: null
   bundles:
-  # Checksums as pinned by an earlier ingest of the same OECD files.
+  # sha256 of each OECD EXT zip as published; a download must match exactly.
   - bundle_id: 2006-2010
     url: https://webfs-sti.oecd.org/files/STI-PIE/ICIO/2025/2006-2010_EXT.zip
     sha256: 343eb3638a7d1eeb2c88d171bd7a33408b31a213ba5eb4c72987b05deaa59533

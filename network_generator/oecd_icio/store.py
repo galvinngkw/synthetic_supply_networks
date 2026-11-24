@@ -2,8 +2,8 @@
 
 Lookup order for ``get_table(country, year)``:
 
-1. ``data_dir`` (default ``data/``): ``{ISO3}.pkl`` as written by the build, if it holds the year and the folder belongs to the requested release (its ``MANIFEST.json``; a folder without one counts as ``LEGACY_RELEASE``). Kept so existing checkouts and hand-made tables keep working.
-2. The local cache, ``<cache>/tables/<release>/{ISO3}.npz``.
+1. ``data_dir``, if given and built for the requested release (its ``MANIFEST.json``; a folder without one counts as ``LEGACY_RELEASE``). If it has ``{ISO3}.pkl``, that file is used and must hold the year: a broken or incomplete table in a folder you point at is an error, never silently replaced by remote data. Only a country with no file there falls through.
+2. The local cache, ``<cache>/tables/<release>/{ISO3}.npz``, re-checked against the pinned manifest on every read, so a re-pinned release never serves stale tables.
 3. The release's mirror. The mirror's ``MANIFEST.json`` is checked against the sha256 pinned in ``releases.yaml``, and each table against the sha256 listed in that manifest, so a pinned commit of this repo fixes the exact numbers it runs on. Mirror tables are ``.npz`` read with ``allow_pickle=False``: nothing downloaded is ever unpickled.
 
 If none of these has the table, the error says how to rebuild it from the raw OECD files.
@@ -56,12 +56,15 @@ def local_release(data_dir: Path) -> str:
 
 
 def _read_local_pickle(path: Path, year: int) -> np.ndarray | None:
+    """The year's table from ``path``; None only if the file does not exist."""
     if not path.is_file():
         return None
     with path.open("rb") as f:
         tables = pickle.load(f)
-    if not isinstance(tables, dict) or year not in tables:
-        return None
+    if not isinstance(tables, dict):
+        raise TableNotFound(f"{path} holds a {type(tables).__name__}, not a year -> matrix dict")
+    if year not in tables:
+        raise TableNotFound(f"{path} has no {year} table; years available: {min(tables)}-{max(tables)}")
     return np.asarray(tables[year])
 
 
@@ -115,12 +118,13 @@ class TableStore:
             shutil.move(tmp_path, dest)
 
     def _cached_tables(self, country: str) -> dict[int, np.ndarray] | None:
+        expected = self.manifest()["tables"].get(f"{country}.npz")
+        if expected is None:
+            return None
         path = self.cache_dir / f"{country}.npz"
-        if not path.is_file():
-            entry = self.manifest()["tables"].get(f"{country}.npz")
-            if entry is None:
-                return None
-            self._fetch(f"{self.mirror_url}/{country}.npz", path, entry)
+        # Verify on every read: after a re-pin the manifest lists new checksums and old cached tables must not be used.
+        if not (path.is_file() and file_sha256(path) == expected):
+            self._fetch(f"{self.mirror_url}/{country}.npz", path, expected)
         return read_npz(path)
 
     # -- public -----------------------------------------------------------------
@@ -134,11 +138,13 @@ class TableStore:
     def industries(self) -> list[str]:
         return list(self.manifest()["industries"])
 
-    def get(self, country: str, year: int, data_dir: Path | str | None = "data") -> np.ndarray:
+    def get(self, country: str, year: int, data_dir: Path | str | None = None) -> np.ndarray:
         """Industry x industry total intermediate use for ``country`` in ``year``, millions USD."""
         country = country.upper()
+        if data_dir is not None and not Path(data_dir).is_dir():
+            raise TableNotFound(f"data folder {data_dir} does not exist")
         # A local folder is only used for the release it was built from, so asking for another edition never silently returns this one's tables.
-        if data_dir is not None and Path(data_dir).is_dir() and local_release(Path(data_dir)) == self.release.release_id:
+        if data_dir is not None and local_release(Path(data_dir)) == self.release.release_id:
             local = _read_local_pickle(Path(data_dir) / f"{country}.pkl", year)
             if local is not None:
                 return local
@@ -167,7 +173,7 @@ def get_table(
     country: str,
     year: int,
     release: str = DEFAULT_RELEASE,
-    data_dir: Path | str | None = "data",
+    data_dir: Path | str | None = None,
 ) -> np.ndarray:
     """Shortcut for ``TableStore(release).get(country, year, data_dir)``."""
     return TableStore(release).get(country, year, data_dir=data_dir)

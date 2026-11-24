@@ -19,14 +19,14 @@ The steps are the ones in ``runner.ipynb``:
 
 import json
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
 
-from network_generator.config import NetworkConfig, TargetConfig, TrainingConfig
+from network_generator.config import DATA_PATH, NetworkConfig, TargetConfig, TrainingConfig
 from network_generator.data_iot import assign_firms_to_industries, load_input_output_table
 from network_generator.initialization import (
     directed_configuration_model,
@@ -75,7 +75,20 @@ def _in_range(value: float, bounds: tuple[float, float] | None) -> bool:
     return bounds is None or bounds[0] <= value <= bounds[1]
 
 
+def _valid_degrees(seq: torch.Tensor, n: int) -> bool:
+    """Draws no simple directed graph can realise, rejected whatever the acceptance bounds (as in the paper scripts)."""
+    return (
+        seq.numel() > 0
+        and bool(torch.isfinite(seq.float()).all())
+        and seq.min().item() >= 0
+        and seq.max().item() < n  # at most n - 1 neighbours without self-loops
+        and bool((seq > 0).any())
+    )
+
+
 def _accept_out(seq, n, rule: DegreeAcceptance, pct: float) -> bool:
+    if not _valid_degrees(seq, n):
+        return False
     return (
         (rule.out_min_max_degree_fraction is None or seq.max().item() >= rule.out_min_max_degree_fraction * n)
         and (rule.out_min_log_var is None or _log_var(seq) >= rule.out_min_log_var)
@@ -84,10 +97,11 @@ def _accept_out(seq, n, rule: DegreeAcceptance, pct: float) -> bool:
     )
 
 
-def _accept_in(seq, rule: DegreeAcceptance, pct: float) -> bool:
+def _accept_in(seq, n, rule: DegreeAcceptance, pct: float) -> bool:
+    if not _valid_degrees(seq, n):
+        return False
     return (
-        seq.min().item() >= 0
-        and (rule.in_min_log_var is None or _log_var(seq) >= rule.in_min_log_var)
+        (rule.in_min_log_var is None or _log_var(seq) >= rule.in_min_log_var)
         and _in_range(_hill(seq, pct), rule.in_hill_range)
     )
 
@@ -104,7 +118,10 @@ def _draw_until(draw, accept, what: str, max_attempts: int) -> tuple[torch.Tenso
 
 
 def seed_everything(seed: int) -> None:
-    """Seed every RNG the pipeline touches: Python (igraph, firm assignment), NumPy (scipy's Burr sampling) and torch."""
+    """Seed every RNG the pipeline touches: Python (igraph, firm assignment), NumPy (scipy's Burr sampling) and torch.
+
+    These are the process-wide generators, so seeding also affects any other code in the process that uses them.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -181,14 +198,19 @@ class SyntheticNetwork:
             }
         )
 
-    def save(self, out_dir: str | Path) -> Path:
-        """Write ``edges.parquet`` (or ``.csv`` if pyarrow is missing), ``firms.csv``, ``target_iot.csv`` and ``run.json``."""
+    def save(self, out_dir: str | Path, edge_format: str = "csv") -> Path:
+        """Write the edge list, ``firms.csv``, ``target_iot.csv`` and ``run.json``.
+
+        ``edge_format`` is ``"csv"`` (default, no extra dependency) or ``"parquet"`` (smaller and faster for large networks; needs ``pyarrow``).
+        """
+        if edge_format not in ("csv", "parquet"):
+            raise ValueError(f"edge_format must be 'csv' or 'parquet', not {edge_format!r}")
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         edges = self.edge_list()
-        try:
+        if edge_format == "parquet":
             edges.to_parquet(out / "edges.parquet", index=False)
-        except ImportError:
+        else:
             edges.to_csv(out / "edges.csv", index=False)
         pd.DataFrame({"firm": np.arange(len(self.firm_to_industry)), "industry": self.firm_to_industry.numpy()}).to_csv(out / "firms.csv", index=False)
         pd.DataFrame(self.target_iot.numpy()).to_csv(out / "target_iot.csv", index=False)
@@ -219,12 +241,14 @@ def generate_synthetic_network(
     optimize: bool = False,
     acceptance: DegreeAcceptance = DegreeAcceptance(),
     seed: int | None = None,
-    data_path: str | Path | None = "data",
+    data_path: str | Path | None = DATA_PATH,
     release: str = DEFAULT_RELEASE,
 ) -> SyntheticNetwork:
     """Generate a synthetic firm network whose industry aggregate matches ``country``'s ``year`` table.
 
     ``country``, ``year`` and ``num_firms`` override the corresponding ``network_config`` fields (YAML defaults otherwise). With ``optimize=True`` the four weight exponents are tuned with Optuna under ``training_config``; otherwise the values in ``network_config`` are used.
+
+    ``seed`` seeds the process-wide Python, NumPy and torch generators (see ``seed_everything``). ``data_path`` defaults to the repository's ``data/`` in a checkout and to no local folder when installed; see ``load_input_output_table``.
     """
     overrides = {
         k: v
@@ -264,7 +288,7 @@ def generate_synthetic_network(
     )
     in_deg, in_draws = _draw_until(
         lambda: generate_burr_degrees_matching_sum(c_val=c_in, d_val=k_in, lam_val=lam_in, max_cutoff=max_in, num_of_firms=n, degree_sum=out_deg.sum()),
-        lambda s: _accept_in(s, acceptance, pct),
+        lambda s: _accept_in(s, n, acceptance, pct),
         "in-degree",
         acceptance.max_attempts,
     )

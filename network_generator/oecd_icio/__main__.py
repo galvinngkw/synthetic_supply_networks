@@ -75,6 +75,12 @@ def _resolve_sources(release, local_bundles, cache_root, allow_unpinned):
             "browser and pass them with --bundle."
         )
     for bundle in downloadable:
+        cached = sorted((cache_root / bundle.sha256).glob("*.zip")) if bundle.sha256 else []
+        if cached and file_sha256(cached[0]) == bundle.sha256:
+            logging.info("using cached %s (%s)", bundle.bundle_id, cached[0])
+            shas[bundle.bundle_id] = bundle.sha256
+            sources.append(extract(cached[0]))
+            continue
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp) / f"{bundle.bundle_id}.zip"
             try:

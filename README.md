@@ -111,7 +111,7 @@ target_config = TargetConfig()
 training_config = TrainingConfig(n_trials=300)
 ```
 
-If you change `country_code`, ensure the matching IOT pickle exists under `data/` (e.g. `data/BEL.pkl`).
+If you change `country_code`, the matching table is taken from `data/` if present, otherwise from the cache or the mirror (see Data).
 
 ## Running the project
 

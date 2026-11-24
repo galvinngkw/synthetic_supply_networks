@@ -9,11 +9,12 @@ import random
 import numpy as np
 import torch
 
-from network_generator.oecd_icio.store import DEFAULT_RELEASE, TableStore
+from network_generator.config import DATA_PATH
+from network_generator.oecd_icio import DEFAULT_RELEASE, TableStore
 
 
 def load_input_output_table(
-    data_path: str | Path | None = "data",
+    data_path: str | Path | None = DATA_PATH,
     country_code: str = "HUN",
     year: int = 2015,
     monetary_unit: float = 1e8,
@@ -21,10 +22,10 @@ def load_input_output_table(
 ) -> tuple[torch.Tensor, np.ndarray, int]:
     """Load a country's industry x industry input-output table.
 
-    The table is looked up in ``data_path`` first (a folder of ``{COUNTRY}.pkl`` files, or one such file), then in the local cache, then downloaded from the pinned mirror of ``release`` (see ``network_generator.oecd_icio.store``). Pass ``data_path=None`` to skip the local folder.
+    The table is looked up in ``data_path`` first (a folder of ``{COUNTRY}.pkl`` files, or one such file), then in the local cache, then downloaded from the pinned mirror of ``release`` (see ``network_generator.oecd_icio.store``). The default is the repository's ``data/`` folder when running from a checkout, and no folder when the package is installed. Pass ``data_path=None`` to skip the local folder.
 
     Args:
-        data_path: Folder of ``{COUNTRY}.pkl`` files, a single pickle, or None.
+        data_path: Folder of ``{COUNTRY}.pkl`` files, a single pickle, or None. A table file that exists there must be valid and hold ``year``.
         country_code: ISO3 country code (e.g., "BEL").
         year: Year of the IOT data.
         monetary_unit: Unit for monetary values (default 100M USD).
